@@ -117,7 +117,10 @@ def train_model(config, run):
     if config.get("resume_checkpoint"):
         global_step = load_checkpoint(config["resume_checkpoint"], model, optimizer)
 
-    forward_model = torch.compile(model) if config.get("compile", False) else model
+    def forward_loss(x, y):
+        return cross_entropy(model(x), y)
+
+    training_loss = torch.compile(forward_loss, dynamic=False) if config.get("compile", False) else forward_loss
     use_bf16 = config.get("bf16", False) and "cuda" in str(device)
     grad_accum_steps = config["batch_size"] // config["microbatch_size"]
     ckpt_path = out_dir / "last.pt"
@@ -154,7 +157,7 @@ def train_model(config, run):
                 else nullcontext()
             )
             with ctx:
-                loss = cross_entropy(forward_model(x), y)
+                loss = training_loss(x, y)
             num_tokens = y.numel()
             loss_sum = loss.detach() * num_tokens
 
@@ -241,9 +244,9 @@ def train_model(config, run):
 if __name__ == "__main__":
     load_dotenv()
     config = {
-        "train_file": "/data/nlp_course/1-basic-data/owt_train.txt",
-        "valid_file": "/data/nlp_course/1-basic-data/owt_valid.txt",
-        "bpe_prefix": "outputs/f6a384f3ff74/tokenizer",
+        "train_file": "/lmfs2026/data/owt_train.txt",
+        "valid_file": "/lmfs2026/data/owt_valid.txt",
+        "bpe_prefix": "outputs/a4206cc4bdcf/tokenizer",
         "max_train_seconds": 21600,
         "previous_elapsed_seconds": 0.0,
         "resume_from_run": None,
@@ -257,12 +260,12 @@ if __name__ == "__main__":
         "context_length": 512,
         "rope_theta": 10000.0,
         "batch_size": 128,
-        "microbatch_size": 32,
+        "microbatch_size": 128,
         "max_learning_rate": 2e-3,
         "min_learning_rate": 2e-4,
-        "warmup_iters": 1120,
-        "cosine_cycle_iters": 56000,
-        "max_steps": 56000,
+        "warmup_iters": 3000,
+        "cosine_cycle_iters": 60000,
+        "max_steps": 60000,
         "betas": (0.9, 0.95),
         "eps": 1e-8,
         "weight_decay": 0.1,

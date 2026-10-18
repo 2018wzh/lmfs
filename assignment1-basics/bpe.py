@@ -14,7 +14,7 @@ class BPE:
         merges: list[tuple[bytes, bytes]] | None = None,
         special_tokens: list[str] | None = None,
     ) -> None:
-        self.num_threads = os.cpu_count() or 1
+        self.num_threads = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
         self.vocab = dict(vocab) if vocab is not None else {i: bytes([i]) for i in range(256)}
         self.merges = list(merges or [])
         self.special_tokens = list(special_tokens or [])

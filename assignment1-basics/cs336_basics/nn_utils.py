@@ -17,8 +17,7 @@ def gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: flo
     if not grads:
         return torch.tensor(0.0)
     total_norm = torch.sqrt(torch.stack([g.float().pow(2).sum() for g in grads]).sum())
-    if total_norm > max_l2_norm:
-        scale = max_l2_norm / (total_norm + eps)
-        for g in grads:
-            g.mul_(scale)
+    scale = torch.clamp(max_l2_norm / (total_norm + eps), max=1.0)
+    for g in grads:
+        g.mul_(scale)
     return total_norm
