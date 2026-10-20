@@ -3,6 +3,7 @@ import time
 PROGRAM_STARTED_UNIX = time.time()
 PROGRAM_STARTED_CLOCK = time.perf_counter()
 
+import argparse
 import json
 import math
 import random
@@ -19,7 +20,7 @@ from cs336_basics.checkpoint import load_checkpoint, save_checkpoint
 from cs336_basics.data import get_batch
 from cs336_basics.model import TransformerLM
 from cs336_basics.nn_utils import cross_entropy, gradient_clipping
-from cs336_basics.optimizer import AdamW, get_lr_cosine_schedule
+from cs336_basics.optimizer import AdamW
 from wandb_record import experiment
 
 
@@ -130,19 +131,24 @@ def train_model(config, run):
     interval_nll = None
     interval_tokens = None
 
+    decay_started = None
     model.train()
-    while global_step < config["max_steps"]:
+    while True:
         remaining = config["deadline_clock"] - time.perf_counter()
         if remaining <= config["reserve_seconds"]:
             break
 
-        lr = get_lr_cosine_schedule(
-            global_step + 1,
-            config["max_learning_rate"],
-            config["min_learning_rate"],
-            config["warmup_iters"],
-            config["cosine_cycle_iters"],
-        )
+        if global_step < config["warmup_iters"]:
+            lr = config["max_learning_rate"] * (global_step + 1) / config["warmup_iters"]
+        else:
+            now = time.perf_counter()
+            if decay_started is None:
+                decay_started = now
+            end = config["deadline_clock"] - config["reserve_seconds"]
+            progress = min(1.0, max(0.0, (now - decay_started) / max(end - decay_started, 1e-9)))
+            lr = config["min_learning_rate"] + 0.5 * (1.0 + math.cos(math.pi * progress)) * (
+                config["max_learning_rate"] - config["min_learning_rate"]
+            )
         for group in optimizer.param_groups:
             group["lr"] = lr
 
@@ -242,10 +248,11 @@ def train_model(config, run):
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(description="Train the transformer language model.").parse_args()
     load_dotenv()
     config = {
-        "train_file": "/lmfs2026/data/owt_train.txt",
-        "valid_file": "/lmfs2026/data/owt_valid.txt",
+        "train_file": "data/owt_train.txt",
+        "valid_file": "data/owt_valid.txt",
         "bpe_prefix": "outputs/a4206cc4bdcf/tokenizer",
         "max_train_seconds": 21600,
         "previous_elapsed_seconds": 0.0,
@@ -254,18 +261,16 @@ if __name__ == "__main__":
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "seed": 336,
         "d_model": 768,
-        "num_layers": 8,
+        "num_layers": 12,
         "num_heads": 12,
         "d_ff": 2048,
-        "context_length": 512,
+        "context_length": 1024,
         "rope_theta": 10000.0,
-        "batch_size": 128,
-        "microbatch_size": 128,
-        "max_learning_rate": 2e-3,
-        "min_learning_rate": 2e-4,
-        "warmup_iters": 3000,
-        "cosine_cycle_iters": 60000,
-        "max_steps": 60000,
+        "batch_size": 64,
+        "microbatch_size": 16,
+        "max_learning_rate": 1.5e-3,
+        "min_learning_rate": 1.5e-4,
+        "warmup_iters": 2000,
         "betas": (0.9, 0.95),
         "eps": 1e-8,
         "weight_decay": 0.1,
@@ -273,7 +278,7 @@ if __name__ == "__main__":
         "bf16": True,
         "compile": True,
         "checkpoint_interval_seconds": 600,
-        "reserve_seconds": 600,
+        "reserve_seconds": 900,
     }
     with experiment("transformer", config) as run:
         run.define_metric("train/step")
