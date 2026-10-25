@@ -84,8 +84,8 @@ def train_model(config, run):
     bpe.load(config["bpe_prefix"])
     vocab_size = len(bpe.vocab)
 
-    train_npy = out_dir / "train.npy"
-    valid_npy = out_dir / "valid.npy"
+    train_npy = Path("data/encoded") / f"{run.id}-train.npy"
+    valid_npy = Path("data/encoded") / f"{run.id}-valid.npy"
     bpe.encode_to_file(config["train_file"], train_npy)
     bpe.encode_to_file(config["valid_file"], valid_npy)
     train_data = np.load(train_npy, mmap_mode="r")
@@ -121,7 +121,7 @@ def train_model(config, run):
     def forward_loss(x, y):
         return cross_entropy(model(x), y)
 
-    training_loss = torch.compile(forward_loss, dynamic=False) if config.get("compile", False) else forward_loss
+    training_loss = torch.compile(forward_loss, dynamic=False, options={"triton.autotune_pointwise": False}) if config.get("compile", False) else forward_loss
     use_bf16 = config.get("bf16", False) and "cuda" in str(device)
     grad_accum_steps = config["batch_size"] // config["microbatch_size"]
     ckpt_path = out_dir / "last.pt"
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     config = {
         "train_file": "data/owt_train.txt",
         "valid_file": "data/owt_valid.txt",
-        "bpe_prefix": "outputs/a4206cc4bdcf/tokenizer",
+        "bpe_prefix": "outputs/tokenizer",
         "max_train_seconds": 21600,
         "previous_elapsed_seconds": 0.0,
         "resume_from_run": None,

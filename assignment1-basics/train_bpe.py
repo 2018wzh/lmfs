@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 
 def main():
     config = {
-        "train_file": "/lmfs2026/data/owt_train.txt",
-        "valid_file": "/lmfs2026/data/owt_valid.txt",
+        "train_file": "data/owt_train.txt",
+        "valid_file": "data/owt_valid.txt",
         "vocab_size": 32000,
         "special_tokens": ["<|endoftext|>"],  # 示例：替换为本人实际清单
     }
